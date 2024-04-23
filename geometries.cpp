@@ -5,11 +5,25 @@ public:
     Vector C; //center
     double R; //radius
     Vector albedo; //color
+    bool mirror;
+    bool transparent;
+    double n;
 
     explicit Sphere(Vector center, double radius, Vector color) {
         C = center;
         R = radius;
         albedo = color;
+        mirror = false;
+        transparent = false;
+    }
+
+    void set_mirror() {
+        mirror = true;
+    }
+
+    void set_refractive_index(double refractive_index) {
+        transparent = true;
+        n = refractive_index;
     }
 
     bool intersect_t(Ray ray, double &t) {
