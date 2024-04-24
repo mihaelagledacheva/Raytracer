@@ -2,6 +2,9 @@
 #include <random>
 #include "geometries.cpp"
 
+static std::default_random_engine engine(10); // random seed = 10
+static std::uniform_real_distribution<double> uniform(0, 1);
+
 class Scene {
 public:
     std::vector<Sphere> spheres;
@@ -10,7 +13,7 @@ public:
         spheres = array;
     }
     
-    bool intersect_t(Ray ray, double &t) {
+    bool intersect_t(Ray &ray, double &t) {
         t = std::numeric_limits<double>::infinity();
         bool intersection = false;
         for (auto sphere : spheres) {
@@ -24,7 +27,7 @@ public:
     }
 
     // computes the point of intersection between a Ray and the scene, if any 
-    bool intersect(Ray ray, double &t, Vector &P, Vector &N, size_t &sphere_id) {
+    bool intersect(Ray &ray, double &t, Vector &P, Vector &N, size_t &sphere_id) {
         t = std::numeric_limits<double>::infinity();
         bool intersection = false;
         for (size_t i = 0; i < spheres.size(); ++i) {
@@ -44,7 +47,7 @@ public:
         return intersection;
     }
 
-    Vector get_intensity(Vector P, Vector albedo, Vector N, double I, Vector S) {
+    Vector get_intensity(Vector &P, Vector &albedo, Vector &N, double I, Vector &S) {
         double d = (S - P).norm();
         Vector w = (S - P) / d;
         //visibility
@@ -60,7 +63,7 @@ public:
         return (I / (4 * M_PI * std::pow(d, 2))) * (albedo / M_PI) * V * std::max(0., dot(N, w));
     }
 
-    Vector get_color(Vector S, double I, Ray ray, int ray_depth, double n) {
+    Vector get_color(Vector &S, double I, Ray &ray, int ray_depth, double n) {
         if (ray_depth < 0) {
             return Vector(0, 0, 0);
         }
@@ -86,7 +89,7 @@ public:
                 // Fresnel law
                 double k0 = std::pow(n1 - n2, 2) / std::pow(n1 + n2, 2);
                 double R = k0 + (1 - k0) * std::pow(1 - std::abs(dot(N, ray.u)), 5);
-                double u = static_cast<double>(std::rand()) / RAND_MAX;
+                double u = uniform(engine);
                 if (sin_theta_i * n1 / n2 <= 1.0 && u >= R) {
                     Vector w_T = (n1 / n2) * (ray.u - dot(ray.u, N) * N);
                     Vector w_N = -N * sqrt(1 - std::pow(n1 / n2, 2) * (1 - std::pow(dot(ray.u, N), 2)));
@@ -99,7 +102,31 @@ public:
                     return get_color(S, I, refracted_ray, ray_depth-1, n1);
                 }
             } else {
-                return get_intensity(P, spheres[sphere_id].albedo, N, I, S);
+                // Direct lighting
+                Vector L0 = get_intensity(P, spheres[sphere_id].albedo, N, I, S);
+                // Indirect lighting
+                double r1 = uniform(engine);
+                double r2 = uniform(engine);
+                double x = cos(2 * M_PI * r1) * sqrt(1 - r2);
+                double y = sin(2 * M_PI * r1) * sqrt(1 - r2);
+                double z = sqrt(r2);
+                Vector T1 = N;
+                double min_N = std::min(std::min(std::abs(N[0]), std::abs(N[1])), std::abs(N[2]));
+                for (int i = 0; i < 3; ++i) {
+                    if (std::abs(T1[i]) == min_N) {
+                        T1[i] = 0;
+                        T1[(i+1)%3] = N[(i+2)%3];
+                        T1[(i+2)%3] = -N[(i+1)%3];
+                        break;
+                    }
+                }
+                T1.normalize();
+                Vector T2 = cross(N, T1);
+                Vector V = x * T1 + y * T2 + z * N;
+                Ray random_ray = Ray(P + 0.001 * N);
+                random_ray.set_direction(V);
+                L0 = L0 + spheres[sphere_id].albedo * get_color(S, I, random_ray, ray_depth-1, n);
+                return L0;
             }
         }
         return Vector(0, 0, 0);

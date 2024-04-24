@@ -14,7 +14,7 @@ public:
         u = direction;
     }
 
-    void compute_direction(int x, int y, int W, int H, Vector Q, double alpha) {
+    void compute_direction(int x, int y, int W, int H, Vector &Q, double alpha) {
         double a = Q[0] + x + 0.5 - W/2;
         double b = Q[1] + y + 0.5 - H/2;
         double c = Q[2] - W/(2*tan(alpha/2));

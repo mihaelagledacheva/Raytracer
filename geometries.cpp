@@ -26,7 +26,7 @@ public:
         n = refractive_index;
     }
 
-    bool intersect_t(Ray ray, double &t) {
+    bool intersect_t(Ray &ray, double &t) {
         double delta = std::pow(dot(ray.u, ray.O - C), 2) - ((ray.O - C).norm2() - std::pow(R, 2));
         if (delta < 0) {
             return false;
@@ -47,7 +47,7 @@ public:
     }
 
     // computes the point of intersection between a Ray and the sphere, if any 
-    bool intersect(Ray ray, double &t, Vector &P, Vector &N) {
+    bool intersect(Ray &ray, double &t, Vector &P, Vector &N) {
         if (intersect_t(ray, t)) {
             P = ray.O + t * ray.u;
             N = (P - C) / (P - C).norm();
