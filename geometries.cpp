@@ -5,6 +5,8 @@ public:
     Vector C; //center
     double R; //radius
     Vector albedo; //color
+    bool light;
+    double i;
     bool mirror;
     bool transparent;
     double n;
@@ -13,8 +15,14 @@ public:
         C = center;
         R = radius;
         albedo = color;
+        light = false;
         mirror = false;
         transparent = false;
+    }
+
+    void set_light(double intensity) {
+        light = true;
+        i = intensity;
     }
 
     void set_mirror() {
@@ -26,7 +34,7 @@ public:
         n = refractive_index;
     }
 
-    bool intersect_t(Ray &ray, double &t) {
+    bool intersect(Ray &ray, double &t) {
         double delta = std::pow(dot(ray.u, ray.O - C), 2) - ((ray.O - C).norm2() - std::pow(R, 2));
         if (delta < 0) {
             return false;
@@ -48,7 +56,7 @@ public:
 
     // computes the point of intersection between a Ray and the sphere, if any 
     bool intersect(Ray &ray, double &t, Vector &P, Vector &N) {
-        if (intersect_t(ray, t)) {
+        if (intersect(ray, t)) {
             P = ray.O + t * ray.u;
             N = (P - C) / (P - C).norm();
             return true;
