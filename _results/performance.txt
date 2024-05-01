@@ -1,0 +1,24 @@
+Rendering basic scene.
+Time elapsed: 0 seconds.
+Output stored in _results/lab_1_1.png
+
+Implementing reflexion and refraction.
+Time elapsed: 31 seconds.
+Output stored in _results/lab_1_2.png
+
+Adding indirect lighting
+Time elapsed: 158 seconds.
+Output stored in _results/lab_2_1.png
+
+Replacing point light with area (scene 1)
+Time elapsed: 264 seconds.
+Output stored in _results/lab_2_2.png
+
+Replacing point light with area (scene 2)
+Time elapsed: 1404 seconds.
+Output stored in _results/lab_2_3.png
+
+Creating depth of field
+Time elapsed: 615 seconds.
+Output stored in _results/lab_2_4.png
+

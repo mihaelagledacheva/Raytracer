@@ -2,9 +2,6 @@
 #include <random>
 #include "geometries.cpp"
 
-static std::default_random_engine engine(10); // random seed = 10
-static std::uniform_real_distribution<double> uniform(0, 1);
-
 class Scene {
 public:
     std::vector<Sphere> spheres;
@@ -62,17 +59,9 @@ public:
     Vector get_intensity(Vector &P, Vector &albedo, Vector &N, double I, Vector &S) {
         double d = (S - P).norm();
         Vector w = (S - P) / d;
-        //visibility
-        int V = 1;
-        Ray ray = Ray(P + 0.0001 * N);
-        ray.set_direction(w);
-        double t;
-        if (intersect(ray, t)) {
-            if (t <= d) {
-                V = 0;
-            }
-        }
-        return (I / (4 * M_PI * std::pow(d, 2))) * (albedo / M_PI) * V * std::max(0., dot(N, w));
+        Vector x = P + 0.0001 * N;
+        int v = visibility(x, S);
+        return (I / (4 * M_PI * std::pow(d, 2))) * (albedo / M_PI) * v * std::max(0., dot(N, w));
     }
 
     Vector random_cos(const Vector &N) {
@@ -95,65 +84,71 @@ public:
         Vector T2 = cross(N, T1);
         return x * T1 + y * T2 + z * N;
     }
-    
-    Vector get_color(Vector &S, double I, Ray &ray, int ray_depth, double n) {
+
+    Vector get_color_unrefined(Vector &S, double I, Ray &ray, int ray_depth=1, bool invert=false) {
         if (ray_depth < 0) {
             return Vector(0, 0, 0);
         }
         double t;
-        Vector P;
-        Vector N;
+        Vector P, N;
         size_t sphere_id;
         if (intersect(ray, t, P, N, sphere_id)) {
             if (spheres[sphere_id].mirror) {
                 // Reflection
-                Ray reflected_ray = Ray(P + 0.0001 * N);
-                Vector u_r = ray.u - 2 * dot(ray.u, N) * N;
-                reflected_ray.set_direction(u_r);
-                return get_color(S, I, reflected_ray, ray_depth-1, n);
+                ray.reflect(P, N);
+                return get_color_unrefined(S, I, ray, ray_depth-1);
             } else if (spheres[sphere_id].transparent) {
                 // Refraction
-                Ray refracted_ray = Ray(P + 0.001 * N);
-                double cos_theta_i = dot(ray.u, N);
-                double sin_theta_i = sqrt(1.0 - std::pow(cos_theta_i, 2));
-                N = (cos_theta_i < 0) ? N : -N;
-                double n1 = (cos_theta_i < 0) ? n : spheres[sphere_id].n;
-                double n2 = (cos_theta_i < 0) ? spheres[sphere_id].n : n;
-                // Fresnel law
-                double k0 = std::pow(n1 - n2, 2) / std::pow(n1 + n2, 2);
-                double R = k0 + (1 - k0) * std::pow(1 - std::abs(dot(N, ray.u)), 5);
-                double u = uniform(engine);
-                if (sin_theta_i <= n2 / n1 && u >= R) {
-                    Vector w_T = (n1 / n2) * (ray.u - dot(ray.u, N) * N);
-                    Vector w_N = -N * sqrt(1 - std::pow(n1 / n2, 2) * (1 - std::pow(dot(ray.u, N), 2)));
-                    refracted_ray.set_direction(w_T + w_N);
-                    return get_color(S, I, refracted_ray, ray_depth-1, n2);
-                } else {
-                    // Total internal reflection
-                    Vector u = ray.u - 2 * dot(ray.u, N) * N;
-                    refracted_ray.set_direction(u);
-                    return get_color(S, I, refracted_ray, ray_depth-1, n1);
-                }
+                double n1 = spheres[sphere_id].n_out;
+                double n2 = spheres[sphere_id].n_in;
+                Ray refracted_ray = refract(ray, P, N, n1, n2, invert);
+                return get_color_unrefined(S, I, refracted_ray, ray_depth-1, invert);
             } else {
+                // Diffusion
+                return get_intensity(P, spheres[sphere_id].albedo, N, I, S);
+            }
+        }
+        return Vector(0, 0, 0);
+    }
+    
+    Vector get_color(Vector &S, double I, Ray &ray, int ray_depth=1, bool invert=false) {
+        if (ray_depth < 0) {
+            return Vector(0, 0, 0);
+        }
+        double t;
+        Vector P, N;
+        size_t sphere_id;
+        if (intersect(ray, t, P, N, sphere_id)) {
+            if (spheres[sphere_id].mirror) {
+                // Reflection
+                ray.reflect(P, N);
+                return get_color(S, I, ray, ray_depth-1);
+            } else if (spheres[sphere_id].transparent) {
+                // Refraction
+                double n1 = spheres[sphere_id].n_out;
+                double n2 = spheres[sphere_id].n_in;
+                Ray refracted_ray = refract(ray, P, N, n1, n2, invert);
+                return get_color(S, I, refracted_ray, ray_depth-1, invert);
+            } else {
+                // Diffusion
                 Vector L0 = get_intensity(P, spheres[sphere_id].albedo, N, I, S);
                 // Indirect lighting
                 Vector V = random_cos(N);
                 Ray random_ray = Ray(P + 0.001 * N);
                 random_ray.set_direction(V);
-                L0 = L0 + spheres[sphere_id].albedo * get_color(S, I, random_ray, ray_depth-1, n);
+                L0 = L0 + spheres[sphere_id].albedo * get_color(S, I, random_ray, ray_depth-1);
                 return L0;
             }
         }
         return Vector(0, 0, 0);
     }
 
-    Vector get_color(Sphere &L, Ray &ray, int ray_depth, double n, bool diffused) {
+    Vector get_color(Sphere &L, Ray &ray, int ray_depth=1, bool invert=false, bool diffused=false) {
         if (ray_depth < 0) {
             return Vector(0, 0, 0);
         }
         double t;
-        Vector P;
-        Vector N;
+        Vector P, N;
         size_t sphere_id;
         if (intersect(ray, t, P, N, sphere_id)) {
             if (spheres[sphere_id].light) {
@@ -164,33 +159,14 @@ public:
                 }
             } else if (spheres[sphere_id].mirror) {
                 // Reflection
-                Ray reflected_ray = Ray(P + 0.0001 * N);
-                Vector u_r = ray.u - 2 * dot(ray.u, N) * N;
-                reflected_ray.set_direction(u_r);
-                return get_color(L, reflected_ray, ray_depth-1, n, false);
+                ray.reflect(P, N);
+                return get_color(L, ray, ray_depth-1, invert);
             } else if (spheres[sphere_id].transparent) {
                 // Refraction
-                Ray refracted_ray = Ray(P + 0.001 * N);
-                double cos_theta_i = dot(ray.u, N);
-                double sin_theta_i = sqrt(1.0 - std::pow(cos_theta_i, 2));
-                N = (cos_theta_i < 0) ? N : -N;
-                double n1 = (cos_theta_i < 0) ? n : spheres[sphere_id].n;
-                double n2 = (cos_theta_i < 0) ? spheres[sphere_id].n : n;
-                // Fresnel law
-                double k0 = std::pow(n1 - n2, 2) / std::pow(n1 + n2, 2);
-                double R = k0 + (1 - k0) * std::pow(1 - std::abs(dot(N, ray.u)), 5);
-                double u = uniform(engine);
-                if (sin_theta_i <= n2 / n1 && u >= R) {
-                    Vector w_T = (n1 / n2) * (ray.u - dot(ray.u, N) * N);
-                    Vector w_N = -N * sqrt(1 - std::pow(n1 / n2, 2) * (1 - std::pow(dot(ray.u, N), 2)));
-                    refracted_ray.set_direction(w_T + w_N);
-                    return get_color(L, refracted_ray, ray_depth-1, n2, false);
-                } else {
-                    // Total internal reflection
-                    Vector u = ray.u - 2 * dot(ray.u, N) * N;
-                    refracted_ray.set_direction(u);
-                    return get_color(L, refracted_ray, ray_depth-1, n1, false);
-                }
+                double n1 = spheres[sphere_id].n_out;
+                double n2 = spheres[sphere_id].n_in;
+                Ray refracted_ray = refract(ray, P, N, n1, n2, invert);
+                return get_color(L, refracted_ray, ray_depth-1, invert);
             } else {
                 // Direct lighting
                 Vector D = (P - L.C) / (P - L.C).norm();
@@ -198,15 +174,16 @@ public:
                 Vector Nprime = (xprime - L.C) / (xprime - L.C).norm();
                 Vector omega_i = (xprime - P) / (xprime - P).norm();
                 double pdf = std::max(dot(Nprime, D), 0.) / (M_PI * L.R * L.R);
-                Vector S = P + 0.001 * N;
-                int v = visibility(S, xprime);
+                Vector x = P + 0.001 * N;
+                Vector S = xprime + 0.001 * Nprime;
+                int v = visibility(x, S);
                 Vector L0 = L.i / (4 * std::pow(M_PI * L.R, 2)) * (spheres[sphere_id].albedo / M_PI) * v;
                 L0 = L0 * std::max(dot(N, omega_i), 0.) * std::max(dot(Nprime, -omega_i), 0.) / ((xprime - P).norm2() * pdf);
                 // Indirect lighting
                 Vector V = random_cos(N);
                 Ray random_ray = Ray(P + 0.001 * N);
                 random_ray.set_direction(V);
-                L0 = L0 + spheres[sphere_id].albedo * get_color(L, random_ray, ray_depth-1, n, true);
+                L0 = L0 + spheres[sphere_id].albedo * get_color(L, random_ray, ray_depth-1, invert, true);
                 return L0;
             }
         }

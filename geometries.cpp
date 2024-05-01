@@ -9,7 +9,8 @@ public:
     double i;
     bool mirror;
     bool transparent;
-    double n;
+    double n_in;
+    double n_out;
 
     explicit Sphere(Vector center, double radius, Vector color) {
         C = center;
@@ -29,9 +30,10 @@ public:
         mirror = true;
     }
 
-    void set_refractive_index(double refractive_index) {
+    void set_refractive_index(double refractive_index_in, double refractive_index_out = 1) {
         transparent = true;
-        n = refractive_index;
+        n_in = refractive_index_in;
+        n_out = refractive_index_out;
     }
 
     bool intersect(Ray &ray, double &t) {
@@ -54,7 +56,6 @@ public:
         }
     }
 
-    // computes the point of intersection between a Ray and the sphere, if any 
     bool intersect(Ray &ray, double &t, Vector &P, Vector &N) {
         if (intersect(ray, t)) {
             P = ray.O + t * ray.u;
