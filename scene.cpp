@@ -9,19 +9,21 @@ public:
         geometries = array;
     }
 
-    bool intersect(Ray &ray, double &t, Vector* P, Vector* N, size_t* geometry_id) {
+    bool intersect(Ray &ray, double &t, Vector* P, Vector* N, Vector* albedo, size_t* geometry_id) {
         t = std::numeric_limits<double>::infinity();
         bool intersection = false;
         for (size_t i = 0; i < geometries.size(); ++i) {
             double t_geometry;
             Vector P_geometry;
             Vector N_geometry;
-            if (geometries[i]->intersect(ray, t_geometry, P_geometry, N_geometry)) {
+            Vector albedo_geometry;
+            if (geometries[i]->intersect(ray, t_geometry, P_geometry, N_geometry, albedo_geometry)) {
                 if (t_geometry < t) {
                     t = t_geometry;
                     if (P && N && geometry_id) {
                         *P = P_geometry;
                         *N = N_geometry;
+                        *albedo = albedo_geometry;
                         *geometry_id = i;
                     }
                     intersection = true;
@@ -36,9 +38,9 @@ public:
         Vector d = (S - P) / (S - P).norm();
         ray.set_direction(d);
         double t;
-        Vector Pprime, Nprime;
+        Vector Pprime, Nprime, albedoprime;
         size_t geometry_id;
-        if (intersect(ray, t, &Pprime, &Nprime, &geometry_id)) {
+        if (intersect(ray, t, &Pprime, &Nprime, &albedoprime, &geometry_id)) {
             if (t <= (S - P).norm()) {
                 return 0;
             }
@@ -80,9 +82,9 @@ public:
             return Vector(0, 0, 0);
         }
         double t;
-        Vector P, N;
+        Vector P, N, albedo;
         size_t geometry_id;
-        if (intersect(ray, t, &P, &N, &geometry_id)) {
+        if (intersect(ray, t, &P, &N, &albedo, &geometry_id)) {
             if (geometries[geometry_id]->mirror) {
                 // Reflection
                 ray.reflect(P, N);
@@ -95,7 +97,7 @@ public:
                 return get_color_unrefined(S, I, refracted_ray, ray_depth-1, invert);
             } else {
                 // Diffusion
-                return get_intensity(P, geometries[geometry_id]->albedo, N, I, S);
+                return get_intensity(P, albedo, N, I, S);
             }
         }
         return Vector(0, 0, 0);
@@ -106,9 +108,9 @@ public:
             return Vector(0, 0, 0);
         }
         double t;
-        Vector P, N;
+        Vector P, N, albedo;
         size_t geometry_id;
-        if (intersect(ray, t, &P, &N, &geometry_id)) {
+        if (intersect(ray, t, &P, &N, &albedo, &geometry_id)) {
             if (geometries[geometry_id]->mirror) {
                 // Reflection
                 ray.reflect(P, N);
@@ -121,12 +123,12 @@ public:
                 return get_color(S, I, refracted_ray, ray_depth-1, invert);
             } else {
                 // Diffusion
-                Vector L0 = get_intensity(P, geometries[geometry_id]->albedo, N, I, S);
+                Vector L0 = get_intensity(P, albedo, N, I, S);
                 // Indirect lighting
                 Vector V = random_cos(N);
                 Ray random_ray = Ray(P + 0.001 * N);
                 random_ray.set_direction(V);
-                L0 = L0 + geometries[geometry_id]->albedo * get_color(S, I, random_ray, ray_depth-1);
+                L0 = L0 + albedo * get_color(S, I, random_ray, ray_depth-1);
                 return L0;
             }
         }
@@ -138,9 +140,9 @@ public:
             return Vector(0, 0, 0);
         }
         double t;
-        Vector P, N;
+        Vector P, N, albedo;
         size_t geometry_id;
-        if (intersect(ray, t, &P, &N, &geometry_id)) {
+        if (intersect(ray, t, &P, &N, &albedo, &geometry_id)) {
             if (geometries[geometry_id]->light) {
                 if (diffused) {
                     return Vector(0, 0, 0);
@@ -167,13 +169,13 @@ public:
                 Vector x = P + 0.001 * N;
                 Vector S = xprime + 0.001 * Nprime;
                 int v = visibility(x, S);
-                Vector L0 = L.i / (4 * std::pow(M_PI * L.R, 2)) * (geometries[geometry_id]->albedo / M_PI) * v;
+                Vector L0 = L.i / (4 * std::pow(M_PI * L.R, 2)) * (albedo / M_PI) * v;
                 L0 = L0 * std::max(dot(N, omega_i), 0.) * std::max(dot(Nprime, -omega_i), 0.) / ((xprime - P).norm2() * pdf);
                 // Indirect lighting
                 Vector V = random_cos(N);
                 Ray random_ray = Ray(P + 0.001 * N);
                 random_ray.set_direction(V);
-                L0 = L0 + geometries[geometry_id]->albedo * get_color(L, random_ray, ray_depth-1, invert, true);
+                L0 = L0 + albedo * get_color(L, random_ray, ray_depth-1, invert, true);
                 return L0;
             }
         }

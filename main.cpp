@@ -236,6 +236,7 @@ void lab_3_1(int K=32) {
     cat.scale(0.7);
     cat.translate(Vector(-5, -15, -5));
     cat.rotate_xy(M_PI/2);
+    cat.set_parameters(false, false);
     geometries.push_back(&cat);
     Scene scene = Scene(geometries);
  
@@ -251,14 +252,7 @@ void lab_3_1(int K=32) {
                 double y = sqrt(-2 * log (r1)) * sin(2 * M_PI * r2);
                 Ray ray = Ray(Q);
                 ray.compute_direction(i + x, j + y, W, H, Q, alpha);
-                Vector P = Q + ray.u * D / std::abs(ray.u[2]);
-                double r = sqrt(uniform(engine));
-                double theta = uniform(engine) * 2 * M_PI;
-                Vector Qprime = Vector(r*cos(theta), r*sin(theta), Q[2]);
-                Ray rayprime = Ray(Qprime);
-                Vector uprime = (P - Qprime) / (P - Qprime).norm();
-                rayprime.set_direction(uprime);
-                color = color + scene.get_color(light, rayprime, 5);
+                color = color + scene.get_color(light, ray, 5);
             }
             image[(i * W + j) * 3 + 0] = std::min(255., std::pow(color[0]/K, 1./2.2));
             image[(i * W + j) * 3 + 1] = std::min(255., std::pow(color[1]/K, 1./2.2));
@@ -268,25 +262,177 @@ void lab_3_1(int K=32) {
     stbi_write_png("_results/lab_3_1.png", W, H, 3, &image[0], 0);
 }
 
+void lab_3_2(int K=32) {
+    // setup
+    std::vector<Geometry*> geometries(stage.begin(), stage.end());
+    Sphere light = Sphere(S, 5, Vector(1, 1, 1));
+    light.set_light(I);
+    geometries.push_back(&light);
+    TriangleMesh cat = TriangleMesh();
+    cat.readOBJ("cat_model/cat.obj");
+    cat.scale(0.7);
+    cat.translate(Vector(-5, -15, -5));
+    cat.rotate_xy(M_PI/2);
+    cat.set_parameters(false, false);
+    cat.bound();
+    geometries.push_back(&cat);
+    Scene scene = Scene(geometries);
+ 
+    std::vector<unsigned char> image(W * H * 3, 0);
+    #pragma omp parallel for
+    for (int i = 0; i < H; i++) {
+        for (int j = 0; j < W; j++) {
+            Vector color = Vector(0, 0, 0);
+            for (int k = 0; k < K; ++k) {
+                double r1 = uniform(engine);
+                double r2 = uniform(engine);
+                double x = sqrt(-2 * log (r1)) * cos(2 * M_PI * r2);
+                double y = sqrt(-2 * log (r1)) * sin(2 * M_PI * r2);
+                Ray ray = Ray(Q);
+                ray.compute_direction(i + x, j + y, W, H, Q, alpha);
+                color = color + scene.get_color(light, ray, 5);
+            }
+            image[(i * W + j) * 3 + 0] = std::min(255., std::pow(color[0]/K, 1./2.2));
+            image[(i * W + j) * 3 + 1] = std::min(255., std::pow(color[1]/K, 1./2.2));
+            image[(i * W + j) * 3 + 2] = std::min(255., std::pow(color[2]/K, 1./2.2));
+        }
+    }
+    stbi_write_png("_results/lab_3_2.png", W, H, 3, &image[0], 0);
+}
+
+void lab_4_1(int K=32) {
+    // setup
+    std::vector<Geometry*> geometries(stage.begin(), stage.end());
+    Sphere light = Sphere(S, 5, Vector(1, 1, 1));
+    light.set_light(I);
+    geometries.push_back(&light);
+    TriangleMesh cat = TriangleMesh();
+    cat.readOBJ("cat_model/cat.obj");
+    cat.scale(0.7);
+    cat.translate(Vector(-5, -15, -5));
+    cat.rotate_xy(M_PI/2);
+    cat.set_parameters(false, false);
+    cat.bvh(100);
+    geometries.push_back(&cat);
+    Scene scene = Scene(geometries);
+ 
+    std::vector<unsigned char> image(W * H * 3, 0);
+    #pragma omp parallel for
+    for (int i = 0; i < H; i++) {
+        for (int j = 0; j < W; j++) {
+            Vector color = Vector(0, 0, 0);
+            for (int k = 0; k < K; ++k) {
+                double r1 = uniform(engine);
+                double r2 = uniform(engine);
+                double x = sqrt(-2 * log (r1)) * cos(2 * M_PI * r2);
+                double y = sqrt(-2 * log (r1)) * sin(2 * M_PI * r2);
+                Ray ray = Ray(Q);
+                ray.compute_direction(i + x, j + y, W, H, Q, alpha);
+                color = color + scene.get_color(light, ray, 5);
+            }
+            image[(i * W + j) * 3 + 0] = std::min(255., std::pow(color[0]/K, 1./2.2));
+            image[(i * W + j) * 3 + 1] = std::min(255., std::pow(color[1]/K, 1./2.2));
+            image[(i * W + j) * 3 + 2] = std::min(255., std::pow(color[2]/K, 1./2.2));
+        }
+    }
+    stbi_write_png("_results/lab_4_1.png", W, H, 3, &image[0], 0);
+}
+
+void lab_4_2(int K=1000) {
+    // setup
+    std::vector<Geometry*> geometries(stage.begin(), stage.end());
+    Sphere light = Sphere(S, 5, Vector(1, 1, 1));
+    light.set_light(I);
+    geometries.push_back(&light);
+    TriangleMesh cat = TriangleMesh();
+    cat.readOBJ("cat_model/cat.obj");
+    cat.scale(0.7);
+    cat.translate(Vector(-5, -15, -5));
+    cat.rotate_xy(M_PI/2);
+    cat.set_parameters(true, false);
+    cat.bvh(100);
+    geometries.push_back(&cat);
+    Scene scene = Scene(geometries);
+ 
+    std::vector<unsigned char> image(W * H * 3, 0);
+    #pragma omp parallel for
+    for (int i = 0; i < H; i++) {
+        for (int j = 0; j < W; j++) {
+            Vector color = Vector(0, 0, 0);
+            for (int k = 0; k < K; ++k) {
+                double r1 = uniform(engine);
+                double r2 = uniform(engine);
+                double x = sqrt(-2 * log (r1)) * cos(2 * M_PI * r2);
+                double y = sqrt(-2 * log (r1)) * sin(2 * M_PI * r2);
+                Ray ray = Ray(Q);
+                ray.compute_direction(i + x, j + y, W, H, Q, alpha);
+                color = color + scene.get_color(light, ray, 5);
+            }
+            image[(i * W + j) * 3 + 0] = std::min(255., std::pow(color[0]/K, 1./2.2));
+            image[(i * W + j) * 3 + 1] = std::min(255., std::pow(color[1]/K, 1./2.2));
+            image[(i * W + j) * 3 + 2] = std::min(255., std::pow(color[2]/K, 1./2.2));
+        }
+    }
+    stbi_write_png("_results/lab_4_2.png", W, H, 3, &image[0], 0);
+}
+
+void lab_4_3(int K=1000) {
+    // setup
+    std::vector<Geometry*> geometries(stage.begin(), stage.end());
+    Sphere light = Sphere(S, 5, Vector(1, 1, 1));
+    light.set_light(I);
+    geometries.push_back(&light);
+    TriangleMesh cat = TriangleMesh();
+    cat.readOBJ("cat_model/cat.obj");
+    cat.scale(0.7);
+    cat.translate(Vector(-10, -15, 0));
+    cat.rotate_xy(M_PI/2);
+    cat.rotate_yz(M_PI/3);
+    cat.set_parameters(true, true, "cat_model/cat_diff.png");
+    cat.bvh(100);
+    geometries.push_back(&cat);
+    Scene scene = Scene(geometries);
+ 
+    std::vector<unsigned char> image(W * H * 3, 0);
+    #pragma omp parallel for
+    for (int i = 0; i < H; i++) {
+        for (int j = 0; j < W; j++) {
+            Vector color = Vector(0, 0, 0);
+            for (int k = 0; k < K; ++k) {
+                double r1 = uniform(engine);
+                double r2 = uniform(engine);
+                double x = sqrt(-2 * log (r1)) * cos(2 * M_PI * r2);
+                double y = sqrt(-2 * log (r1)) * sin(2 * M_PI * r2);
+                Ray ray = Ray(Q);
+                ray.compute_direction(i + x, j + y, W, H, Q, alpha);
+                color = color + scene.get_color(light, ray, 5);
+            }
+            image[(i * W + j) * 3 + 0] = std::min(255., std::pow(color[0]/K, 1./2.2));
+            image[(i * W + j) * 3 + 1] = std::min(255., std::pow(color[1]/K, 1./2.2));
+            image[(i * W + j) * 3 + 2] = std::min(255., std::pow(color[2]/K, 1./2.2));
+        }
+    }
+    stbi_write_png("_results/lab_4_3.png", W, H, 3, &image[0], 0);
+}
 
 int main() {
     std::chrono::time_point<std::chrono::steady_clock> start, end;
     std::chrono::seconds::rep duration;
 
-    /*std::cout << "Rendering basic scene." << std::endl;
+    std::cout << "Rendering basic scene" << std::endl;
     start = std::chrono::steady_clock::now();
     lab_1_1();
     end = std::chrono::steady_clock::now();
     duration = std::chrono::duration_cast<std::chrono::seconds>(end - start).count();
-    std::cout << "Time elapsed: " << duration << " seconds." << std::endl;
+    std::cout << "Time elapsed: " << duration << " seconds" << std::endl;
     std::cout << "Output stored in _results/lab_1_1.png" << std::endl << std::endl;
 
-    std::cout << "Implementing reflexion and refraction." << std::endl;
+    std::cout << "Implementing reflexion and refraction" << std::endl;
     start = std::chrono::steady_clock::now();
     lab_1_2();
     end = std::chrono::steady_clock::now();
     duration = std::chrono::duration_cast<std::chrono::seconds>(end - start).count();
-    std::cout << "Time elapsed: " << duration << " seconds." << std::endl;
+    std::cout << "Time elapsed: " << duration << " seconds" << std::endl;
     std::cout << "Output stored in _results/lab_1_2.png" << std::endl << std::endl;
 
     std::cout << "Adding indirect lighting" << std::endl;
@@ -294,7 +440,7 @@ int main() {
     lab_2_1();
     end = std::chrono::steady_clock::now();
     duration = std::chrono::duration_cast<std::chrono::seconds>(end - start).count();
-    std::cout << "Time elapsed: " << duration << " seconds." << std::endl;
+    std::cout << "Time elapsed: " << duration << " seconds" << std::endl;
     std::cout << "Output stored in _results/lab_2_1.png" << std::endl << std::endl;
 
     std::cout << "Replacing point light with area (scene 1)" << std::endl;
@@ -302,7 +448,7 @@ int main() {
     lab_2_2();
     end = std::chrono::steady_clock::now();
     duration = std::chrono::duration_cast<std::chrono::seconds>(end - start).count();
-    std::cout << "Time elapsed: " << duration << " seconds." << std::endl;
+    std::cout << "Time elapsed: " << duration << " seconds" << std::endl;
     std::cout << "Output stored in _results/lab_2_2.png" << std::endl << std::endl;
     
     std::cout << "Replacing point light with area (scene 2)" << std::endl;
@@ -310,7 +456,7 @@ int main() {
     lab_2_3();
     end = std::chrono::steady_clock::now();
     duration = std::chrono::duration_cast<std::chrono::seconds>(end - start).count();
-    std::cout << "Time elapsed: " << duration << " seconds." << std::endl;
+    std::cout << "Time elapsed: " << duration << " seconds" << std::endl;
     std::cout << "Output stored in _results/lab_2_3.png" << std::endl << std::endl;
 
     std::cout << "Creating depth of field" << std::endl;
@@ -318,16 +464,48 @@ int main() {
     lab_2_4();
     end = std::chrono::steady_clock::now();
     duration = std::chrono::duration_cast<std::chrono::seconds>(end - start).count();
-    std::cout << "Time elapsed: " << duration << " seconds." << std::endl;
-    std::cout << "Output stored in _results/lab_2_4.png" << std::endl << std::endl;*/
+    std::cout << "Time elapsed: " << duration << " seconds" << std::endl;
+    std::cout << "Output stored in _results/lab_2_4.png" << std::endl << std::endl;
 
     std::cout << "Rendering cat model" << std::endl;
     start = std::chrono::steady_clock::now();
     lab_3_1();
     end = std::chrono::steady_clock::now();
     duration = std::chrono::duration_cast<std::chrono::seconds>(end - start).count();
-    std::cout << "Time elapsed: " << duration << " seconds." << std::endl;
+    std::cout << "Time elapsed: " << duration << " seconds" << std::endl;
     std::cout << "Output stored in _results/lab_3_1.png" << std::endl << std::endl;
+
+    std::cout << "Using a bounding box" << std::endl;
+    start = std::chrono::steady_clock::now();
+    lab_3_2();
+    end = std::chrono::steady_clock::now();
+    duration = std::chrono::duration_cast<std::chrono::seconds>(end - start).count();
+    std::cout << "Time elapsed: " << duration << " seconds" << std::endl;
+    std::cout << "Output stored in _results/lab_3_2.png" << std::endl << std::endl;
+
+    std::cout << "Implementing bounding volume hierarchies" << std::endl;
+    start = std::chrono::steady_clock::now();
+    lab_4_1();
+    end = std::chrono::steady_clock::now();
+    duration = std::chrono::duration_cast<std::chrono::seconds>(end - start).count();
+    std::cout << "Time elapsed: " << duration << " seconds" << std::endl;
+    std::cout << "Output stored in _results/lab_4_1.png" << std::endl << std::endl;
+
+    std::cout << "Interpolating on normals" << std::endl;
+    start = std::chrono::steady_clock::now();
+    lab_4_2();
+    end = std::chrono::steady_clock::now();
+    duration = std::chrono::duration_cast<std::chrono::seconds>(end - start).count();
+    std::cout << "Time elapsed: " << duration << " seconds" << std::endl;
+    std::cout << "Output stored in _results/lab_4_2.png" << std::endl << std::endl;
+    
+    std::cout << "Adding texture" << std::endl;
+    start = std::chrono::steady_clock::now();
+    lab_4_3();
+    end = std::chrono::steady_clock::now();
+    duration = std::chrono::duration_cast<std::chrono::seconds>(end - start).count();
+    std::cout << "Time elapsed: " << duration << " seconds" << std::endl;
+    std::cout << "Output stored in _results/lab_4_3.png" << std::endl << std::endl;
 
     return 0;
 }

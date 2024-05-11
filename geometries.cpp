@@ -28,7 +28,7 @@ public:
         n_out = refractive_index_out;
     }
 
-    virtual bool intersect(Ray &ray, double &t, Vector &P, Vector &N) {
+    virtual bool intersect(Ray &ray, double &t, Vector &P, Vector &N, Vector &albedo) {
         return false;
     }
 };
@@ -48,7 +48,7 @@ public:
         transparent = false;
     }
 
-    bool intersect(Ray &ray, double &t, Vector &P, Vector &N) override {
+    bool intersect(Ray &ray, double &t, Vector &P, Vector &N, Vector &albedo) override {
         double delta = std::pow(dot(ray.u, ray.O - C), 2) - ((ray.O - C).norm2() - std::pow(R, 2));
         if (delta < 0) {
             return false;
@@ -65,47 +65,129 @@ public:
                 }
                 P = ray.O + t * ray.u;
                 N = (P - C) / (P - C).norm();
+                albedo = this->albedo;
                 return true;
             }
         }
     }
 };
 
-
-class Triangle : public Geometry {
+class Plane {
 public:
+    Vector N;
     Vector A;
-    Vector B;
-    Vector C;
+
+    Plane() {}
+    Plane(Vector point, Vector normal) {
+        A = point;
+        N = normal;
+    }
+
+    bool intersect(Ray &ray, double &t) {
+        t = dot(A - ray.O, N) / dot(ray.u, N);
+        if (t < 0) {
+            return false;
+        }
+        return true;
+    }
+};
+
+class BoundingBox {
+public:
+    Vector Bmin, Bmax;
+    Plane X0, X1;
+    Plane Y0, Y1;
+    Plane Z0, Z1;
+
+    BoundingBox() {}
+    BoundingBox(Vector b, Vector B) {
+        Bmin = b;
+        Bmax = B;
+        X0 = Plane(Vector(b[0], (b[1]+B[1])/2, (b[2]+B[2])/2), Vector(1, 0, 0));
+        X1 = Plane(Vector(B[0], (b[1]+B[1])/2, (b[2]+B[2])/2), Vector(1, 0, 0));
+        Y0 = Plane(Vector((b[0]+B[0])/2, b[1], (b[2]+B[2])/2), Vector(0, 1, 0));
+        Y1 = Plane(Vector((b[0]+B[0])/2, B[1], (b[2]+B[2])/2), Vector(0, 1, 0));
+        Z0 = Plane(Vector((b[0]+B[0])/2, (b[1]+B[1])/2, b[2]), Vector(0, 0, 1));
+        Z1 = Plane(Vector((b[0]+B[0])/2, (b[1]+B[1])/2, B[2]), Vector(0, 0, 1));
+    }
+
+    bool intersect(Ray &ray) {
+        double tx0, ty0, tz0;
+        double tx1, ty1, tz1;
+        X0.intersect(ray, tx0);
+        X1.intersect(ray, tx1);
+        if (tx1 < tx0) {
+            std::swap(tx0, tx1);
+        }
+        Y0.intersect(ray, ty0);
+        Y1.intersect(ray, ty1);
+        if (ty1 < ty0) {
+            std::swap(ty0, ty1);
+        }
+        Z0.intersect(ray, tz0);
+        Z1.intersect(ray, tz1);
+        if (tz1 < tz0) {
+            std::swap(tz0, tz1);
+        }
+        double max0 = std::max(tx0, std::max(ty0, tz0));
+        double min1 = std::min(tx1, std::min(ty1, tz1));
+        if (min1 > max0) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+};
+
+
+class Triangle {
+public:
+    Vector A, B, C;
+    Vector NA, NB, NC;
+    Vector UVA, UVB, UVC;
 
     explicit Triangle(Vector vertix_1, Vector vertix_2, Vector vertix_3) {
         A = vertix_1;
         B = vertix_2;
         C = vertix_3;
-        albedo = Vector(1, 1, 1);
-        light = false;
-        mirror = false;
-        transparent = false;
     }
 
-    bool intersect(Ray &ray, double &t, Vector &P, Vector &N) override {
+    void set_normals(Vector normal_a, Vector normal_b, Vector normal_c) {
+        NA = normal_a;
+        NB = normal_b;
+        NC = normal_c;
+    }
+
+    void set_uvs(Vector uv_a, Vector uv_b, Vector uv_c) {
+        UVA = uv_a;
+        UVB = uv_b;
+        UVC = uv_c;
+    }
+
+    Vector barycenter() {
+        double x = (A[0] + B[0] + C[0]) / 3;
+        double y = (A[1] + B[1] + C[1]) / 3;
+        double z = (A[2] + B[2] + C[2]) / 3;
+        return Vector(x, y, z);
+    }
+
+    bool intersect(Ray &ray, double &t, double &alpha, double &beta, double &gamma) {
         Vector e1 = B - A;
         Vector e2 = C - A;
         double det = dot(e1, cross(ray.u, e2));
-        double u = dot(ray.O - A, cross(ray.u, e2)) / det;
-        if (u < 0 || u > 1) {
+        beta = dot(ray.O - A, cross(ray.u, e2)) / det;
+        if (beta < 0 || beta > 1) {
             return false;
         }
-        double v = dot(ray.u, cross(ray.O - A, e1)) / det;
-        if (v < 0 || u + v > 1) {
+        gamma = dot(ray.u, cross(ray.O - A, e1)) / det;
+        if (gamma < 0 || beta + gamma > 1) {
             return false;
         }
         t = dot(e2, cross(ray.O - A, e1)) / det;
         if (t < 0) {
             return false;
         }
-        P = (1 - u - v) * A + u * B + v * C;
-        N = cross(e1, e2) / cross(e1, e2).norm();
+        alpha = 1 - beta - gamma;
         return true;
     }
 };
@@ -128,6 +210,122 @@ public:
 
 
 class TriangleMesh : public Geometry {
+private:
+    bool bounded;
+    bool shading_normal;
+    bool texture;
+    int channels, W, H;
+    unsigned char* image_data;
+    
+    std::vector<Triangle> triangles;
+    BoundingBox box;
+
+    std::vector<std::vector<Triangle>> triangle_sets;
+    std::vector<BoundingBox> boxes;
+
+    BoundingBox bound(const std::vector<Triangle>& ts) {
+        double x_min = ts[0].A[0];
+        double x_max = ts[0].A[0];
+        double y_min = ts[0].A[1];
+        double y_max = ts[0].A[1];
+        double z_min = ts[0].A[2];
+        double z_max = ts[0].A[2];
+        for (size_t i = 1; i < ts.size(); ++i) {
+            x_min = std::min(ts[i].A[0], std::min(ts[i].B[0], std::min(ts[i].C[0], x_min)));
+            x_max = std::max(ts[i].A[0], std::max(ts[i].B[0], std::max(ts[i].C[0], x_max)));
+            y_min = std::min(ts[i].A[1], std::min(ts[i].B[1], std::min(ts[i].C[1], y_min)));
+            y_max = std::max(ts[i].A[1], std::max(ts[i].B[1], std::max(ts[i].C[1], y_max)));
+            z_min = std::min(ts[i].A[2], std::min(ts[i].B[2], std::min(ts[i].C[2], z_min)));
+            z_max = std::max(ts[i].A[2], std::max(ts[i].B[2], std::max(ts[i].C[2], z_max)));
+        }
+        return BoundingBox(Vector(x_min, y_min, z_min), Vector(x_max, y_max, z_max));
+    }
+    
+    void bvh(std::vector<Triangle> ts, BoundingBox b, int threshold) {
+        if (ts.size() > 0 && ts.size() <= threshold) {
+            triangle_sets.push_back(ts);
+            boxes.push_back(b);
+        } else if (ts.size() > threshold) {
+            double x = b.Bmax[0] - b.Bmin[0];
+            double y = b.Bmax[1] - b.Bmin[1];
+            double z = b.Bmax[2] - b.Bmin[2];
+            std::vector<Triangle> set1, set2;
+            if (x >= y && x >= z) {
+                double mid = b.Bmin[0] + (x / 2);
+                for(int i; i < ts.size(); ++i) {
+                    if (ts[i].barycenter()[0] < mid) {
+                        set1.push_back(ts[i]);
+                    } else {
+                        set2.push_back(ts[i]);
+                    }
+                }
+            } else if (y >= x && y >= z) {
+                double mid = b.Bmin[1] + (y / 2);
+                for(int i; i < ts.size(); ++i) {
+                    if (ts[i].barycenter()[1] < mid) {
+                        set1.push_back(ts[i]);
+                    } else {
+                        set2.push_back(ts[i]);
+                    }
+                }
+            } else {
+                double mid = b.Bmin[2] + (z / 2);
+                for(int i; i < ts.size(); ++i) {
+                    if (ts[i].barycenter()[2] < mid) {
+                        set1.push_back(ts[i]);
+                    } else {
+                        set2.push_back(ts[i]);
+                    }
+                }
+            }
+            if (set1.size() == 0 || set2.size() == 0) {
+                triangle_sets.push_back(ts);
+                boxes.push_back(b);
+            } else {
+                bvh(set1, bound(set1), threshold);
+                bvh(set2, bound(set2), threshold);
+            }
+        }
+    }
+
+    void intersect(Triangle& triangle, Ray& ray, double& t, Vector& P, Vector& N, Vector& albedo, bool& intersection) {
+        double t_geometry;
+        double alpha, beta, gamma;
+        if (triangle.intersect(ray, t_geometry, alpha, beta, gamma)) {
+            if (t_geometry < t) {
+                t = t_geometry;
+                P = alpha * triangle.A + beta * triangle.B + gamma * triangle.C;
+                if (shading_normal) {
+                    N = alpha * triangle.NA + beta * triangle.NB + gamma * triangle.NC;
+                } else {
+                    N = cross(triangle.B - triangle.A, triangle.C - triangle.A);
+                }
+                N.normalize();
+                if (texture) {
+                    Vector UV = alpha * triangle.UVA + beta * triangle.UVB + gamma * triangle.UVC;
+                    double u = std::fmod(UV[0], 1.0);
+                    double v = std::fmod(UV[1], 1.0);
+                    if (u < 0) u += 1.0;
+                    if (v < 0) v += 1.0;
+                    int pixel = floor((1 - v) * (H - 1)) * W + floor(u * (W - 1));
+                    if (pixel < 0 || pixel >= W * H * channels) {
+                        std::cout << alpha << std::endl;
+                        std::cout << beta << std::endl;
+                        std::cout << gamma << std::endl;
+                        std::cout << triangle.UVA[0] << std::endl;
+                        std::cout << triangle.UVA[1] << std::endl;
+                        std::cout << pixel << std::endl;
+                    }
+                    double r = std::min(1., std::pow(image_data[pixel * channels + 0] / 255.0, 2.2));
+                    double g = std::min(1., std::pow(image_data[pixel * channels + 1] / 255.0, 2.2));
+                    double b = std::min(1., std::pow(image_data[pixel * channels + 2] / 255.0, 2.2));
+                    albedo = Vector(r, g, b);
+                }
+            }
+            intersection = true;
+        }
+    }
+
 public:
     TriangleMesh() {
         albedo = Vector(1, 1, 1);
@@ -139,47 +337,98 @@ public:
 
     void scale(double factor) {
         Vector center(0, 0, 0);
-        for (const auto& vertex : vertices) {
-            center = center + vertex;
+        for (int i = 0; i < vertices.size(); ++i) {
+            center = center + vertices[i];
         }
         center = center / vertices.size();
-        for (auto& vertex : vertices) {
-            vertex = center + factor * (vertex - center);
+        for (int i = 0; i < vertices.size(); ++i) {
+            vertices[i] = center + factor * (vertices[i] - center);
         }
     }
 
     void translate(const Vector& translation) {
-        for (auto& vertex : vertices) {
-            vertex = vertex + translation;
+        for (int i = 0; i < vertices.size(); ++i) {
+            vertices[i] = vertices[i] + translation;
         }
     }
 
     void rotate_xy(double theta) {
-        for (auto& vertex : vertices) {
-            double x = vertex[0] * cos(theta) - vertex[1] * sin(theta);
-            double y = vertex[0] * sin(theta) + vertex[1] * cos(theta);
-            vertex = Vector(x, y, vertex[2]);
+        for (int i = 0; i < vertices.size(); ++i) {
+            double x = vertices[i][0] * cos(theta) - vertices[i][1] * sin(theta);
+            double y = vertices[i][0] * sin(theta) + vertices[i][1] * cos(theta);
+            vertices[i] = Vector(x, y, vertices[i][2]);
+        }
+        for (int i = 0; i < normals.size(); ++i) {
+            double x = normals[i][0] * cos(theta) - normals[i][1] * sin(theta);
+            double y = normals[i][0] * sin(theta) + normals[i][1] * cos(theta);
+            normals[i] = Vector(x, y, normals[i][2]);
+            normals[i].normalize();
         }
     }
 
-    bool intersect(Ray &ray, double &t, Vector &P, Vector &N) override {
+    void rotate_yz(double theta) {
+        for (int i = 0; i < vertices.size(); ++i) {
+            double y = vertices[i][1] * cos(theta) - vertices[i][2] * sin(theta);
+            double z = vertices[i][1] * sin(theta) + vertices[i][2] * cos(theta);
+            vertices[i] = Vector(vertices[i][0], y, z);
+        }
+        for (int i = 0; i < normals.size(); ++i) {
+            double y = normals[i][1] * cos(theta) - normals[i][2] * sin(theta);
+            double z = normals[i][1] * sin(theta) + normals[i][2] * cos(theta);
+            normals[i] = Vector(normals[i][0], y, z);
+            normals[i].normalize();
+        }
+    }
+
+    void set_parameters(bool shading_normal, bool texture, const char* filename="") {
+        this->shading_normal = shading_normal;
+        this->texture = texture;
+        if (texture) {
+            image_data = stbi_load(filename, &W, &H, &channels, 0);
+        }
+        bounded = false;
+        for (int i = 0; i < indices.size(); ++i) {
+            Vector A = vertices[indices[i].vtxi];
+            Vector B = vertices[indices[i].vtxj];
+            Vector C = vertices[indices[i].vtxk];
+            Triangle triangle = Triangle(A, B, C);
+            if (shading_normal) {
+                triangle.set_normals(normals[indices[i].ni], normals[indices[i].nj], normals[indices[i].nk]);
+            }
+            if (texture) {
+                triangle.set_uvs(uvs[indices[i].uvi], uvs[indices[i].uvj], uvs[indices[i].uvk]);
+            }
+            triangles.push_back(triangle);
+        }
+    }
+
+    void bound() {
+        bounded = true;
+        box = bound(triangles);
+        triangle_sets.push_back(triangles);
+        boxes.push_back(box);
+    }
+
+    void bvh(int threshold) {
+        bounded = true;
+        box = bound(triangles);
+        bvh(triangles, box, threshold);
+    }
+
+    bool intersect(Ray &ray, double &t, Vector &P, Vector &N, Vector &albedo) override {
         t = std::numeric_limits<double>::infinity();
         bool intersection = false;
-        for (auto index : indices) {
-            Vector A = vertices[index.vtxi];
-            Vector B = vertices[index.vtxj];
-            Vector C = vertices[index.vtxk];
-            Triangle triangle = Triangle(A, B, C);
-            double t_geometry;
-            Vector P_geometry;
-            Vector N_geometry;
-            if (triangle.intersect(ray, t_geometry, P_geometry, N_geometry)) {
-                if (t_geometry < t) {
-                    t = t_geometry;
-                    P = P_geometry;
-                    N = N_geometry;
+        if (bounded) {
+            for (int i = 0; i < boxes.size(); ++i) {
+                if (boxes[i].intersect(ray)) {
+                    for (int j = 0; j < triangle_sets[i].size(); ++j) {
+                        intersect(triangle_sets[i][j], ray, t, P, N, albedo, intersection);
+                    }
                 }
-                intersection = true;
+            }
+        } else {
+            for (int i = 0; i < triangles.size(); ++i) {
+                intersect(triangles[i], ray, t, P, N, albedo, intersection);
             }
         }
         return intersection;
@@ -230,7 +479,7 @@ public:
             }
             if (line[0] == 'v' && line[1] == 't') {
                 Vector vec;
-                sscanf(line, "vt %lf %lf\n", &vec[0], &vec[1]);
+                sscanf(line, "vt %lf %lf %lf\n", &vec[0], &vec[1], &vec[2]);
                 uvs.push_back(vec);
             }
             if (line[0] == 'f') {
