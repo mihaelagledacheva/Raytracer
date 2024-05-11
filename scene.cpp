@@ -1,41 +1,29 @@
 #include <limits>
-#include <random>
 #include "geometries.cpp"
 
 class Scene {
 public:
-    std::vector<Sphere> spheres;
+    std::vector<Geometry*> geometries;
 
-    explicit Scene(std::vector<Sphere> array) {
-        spheres = array;
-    }
-    
-    bool intersect(Ray &ray, double &t) {
-        t = std::numeric_limits<double>::infinity();
-        bool intersection = false;
-        for (auto sphere : spheres) {
-            double t_sphere;
-            if (sphere.intersect(ray, t_sphere)) {
-                t = std::min(t, t_sphere);
-                intersection = true;
-            }
-        }
-        return intersection;
+    explicit Scene(std::vector<Geometry*> &array) {
+        geometries = array;
     }
 
-    bool intersect(Ray &ray, double &t, Vector &P, Vector &N, size_t &sphere_id) {
+    bool intersect(Ray &ray, double &t, Vector* P, Vector* N, size_t* geometry_id) {
         t = std::numeric_limits<double>::infinity();
         bool intersection = false;
-        for (size_t i = 0; i < spheres.size(); ++i) {
-            double t_sphere;
-            Vector P_sphere;
-            Vector N_sphere;
-            if (spheres[i].intersect(ray, t_sphere, P_sphere, N_sphere)) {
-                if (t_sphere < t) {
-                    t = t_sphere;
-                    P = P_sphere;
-                    N = N_sphere;
-                    sphere_id = i;
+        for (size_t i = 0; i < geometries.size(); ++i) {
+            double t_geometry;
+            Vector P_geometry;
+            Vector N_geometry;
+            if (geometries[i]->intersect(ray, t_geometry, P_geometry, N_geometry)) {
+                if (t_geometry < t) {
+                    t = t_geometry;
+                    if (P && N && geometry_id) {
+                        *P = P_geometry;
+                        *N = N_geometry;
+                        *geometry_id = i;
+                    }
                     intersection = true;
                 }
             }
@@ -48,7 +36,9 @@ public:
         Vector d = (S - P) / (S - P).norm();
         ray.set_direction(d);
         double t;
-        if (intersect(ray, t)) {
+        Vector Pprime, Nprime;
+        size_t geometry_id;
+        if (intersect(ray, t, &Pprime, &Nprime, &geometry_id)) {
             if (t <= (S - P).norm()) {
                 return 0;
             }
@@ -91,21 +81,21 @@ public:
         }
         double t;
         Vector P, N;
-        size_t sphere_id;
-        if (intersect(ray, t, P, N, sphere_id)) {
-            if (spheres[sphere_id].mirror) {
+        size_t geometry_id;
+        if (intersect(ray, t, &P, &N, &geometry_id)) {
+            if (geometries[geometry_id]->mirror) {
                 // Reflection
                 ray.reflect(P, N);
                 return get_color_unrefined(S, I, ray, ray_depth-1);
-            } else if (spheres[sphere_id].transparent) {
+            } else if (geometries[geometry_id]->transparent) {
                 // Refraction
-                double n1 = spheres[sphere_id].n_out;
-                double n2 = spheres[sphere_id].n_in;
+                double n1 = geometries[geometry_id]->n_out;
+                double n2 = geometries[geometry_id]->n_in;
                 Ray refracted_ray = refract(ray, P, N, n1, n2, invert);
                 return get_color_unrefined(S, I, refracted_ray, ray_depth-1, invert);
             } else {
                 // Diffusion
-                return get_intensity(P, spheres[sphere_id].albedo, N, I, S);
+                return get_intensity(P, geometries[geometry_id]->albedo, N, I, S);
             }
         }
         return Vector(0, 0, 0);
@@ -117,26 +107,26 @@ public:
         }
         double t;
         Vector P, N;
-        size_t sphere_id;
-        if (intersect(ray, t, P, N, sphere_id)) {
-            if (spheres[sphere_id].mirror) {
+        size_t geometry_id;
+        if (intersect(ray, t, &P, &N, &geometry_id)) {
+            if (geometries[geometry_id]->mirror) {
                 // Reflection
                 ray.reflect(P, N);
                 return get_color(S, I, ray, ray_depth-1);
-            } else if (spheres[sphere_id].transparent) {
+            } else if (geometries[geometry_id]->transparent) {
                 // Refraction
-                double n1 = spheres[sphere_id].n_out;
-                double n2 = spheres[sphere_id].n_in;
+                double n1 = geometries[geometry_id]->n_out;
+                double n2 = geometries[geometry_id]->n_in;
                 Ray refracted_ray = refract(ray, P, N, n1, n2, invert);
                 return get_color(S, I, refracted_ray, ray_depth-1, invert);
             } else {
                 // Diffusion
-                Vector L0 = get_intensity(P, spheres[sphere_id].albedo, N, I, S);
+                Vector L0 = get_intensity(P, geometries[geometry_id]->albedo, N, I, S);
                 // Indirect lighting
                 Vector V = random_cos(N);
                 Ray random_ray = Ray(P + 0.001 * N);
                 random_ray.set_direction(V);
-                L0 = L0 + spheres[sphere_id].albedo * get_color(S, I, random_ray, ray_depth-1);
+                L0 = L0 + geometries[geometry_id]->albedo * get_color(S, I, random_ray, ray_depth-1);
                 return L0;
             }
         }
@@ -149,22 +139,22 @@ public:
         }
         double t;
         Vector P, N;
-        size_t sphere_id;
-        if (intersect(ray, t, P, N, sphere_id)) {
-            if (spheres[sphere_id].light) {
+        size_t geometry_id;
+        if (intersect(ray, t, &P, &N, &geometry_id)) {
+            if (geometries[geometry_id]->light) {
                 if (diffused) {
                     return Vector(0, 0, 0);
                 } else {
                     return Vector(1, 1, 1) * L.i / (4 * std::pow(M_PI * L.R, 2));
                 }
-            } else if (spheres[sphere_id].mirror) {
+            } else if (geometries[geometry_id]->mirror) {
                 // Reflection
                 ray.reflect(P, N);
                 return get_color(L, ray, ray_depth-1, invert);
-            } else if (spheres[sphere_id].transparent) {
+            } else if (geometries[geometry_id]->transparent) {
                 // Refraction
-                double n1 = spheres[sphere_id].n_out;
-                double n2 = spheres[sphere_id].n_in;
+                double n1 = geometries[geometry_id]->n_out;
+                double n2 = geometries[geometry_id]->n_in;
                 Ray refracted_ray = refract(ray, P, N, n1, n2, invert);
                 return get_color(L, refracted_ray, ray_depth-1, invert);
             } else {
@@ -177,13 +167,13 @@ public:
                 Vector x = P + 0.001 * N;
                 Vector S = xprime + 0.001 * Nprime;
                 int v = visibility(x, S);
-                Vector L0 = L.i / (4 * std::pow(M_PI * L.R, 2)) * (spheres[sphere_id].albedo / M_PI) * v;
+                Vector L0 = L.i / (4 * std::pow(M_PI * L.R, 2)) * (geometries[geometry_id]->albedo / M_PI) * v;
                 L0 = L0 * std::max(dot(N, omega_i), 0.) * std::max(dot(Nprime, -omega_i), 0.) / ((xprime - P).norm2() * pdf);
                 // Indirect lighting
                 Vector V = random_cos(N);
                 Ray random_ray = Ray(P + 0.001 * N);
                 random_ray.set_direction(V);
-                L0 = L0 + spheres[sphere_id].albedo * get_color(L, random_ray, ray_depth-1, invert, true);
+                L0 = L0 + geometries[geometry_id]->albedo * get_color(L, random_ray, ray_depth-1, invert, true);
                 return L0;
             }
         }

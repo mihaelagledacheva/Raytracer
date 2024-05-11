@@ -22,3 +22,6 @@ Creating depth of field
 Time elapsed: 615 seconds.
 Output stored in _results/lab_2_4.png
 
+Rendering cat model
+Time elapsed: 2018 seconds.
+Output stored in _results/lab_3_1.png

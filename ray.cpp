@@ -1,4 +1,5 @@
 #include <cmath>
+#include <random>
 #include "vector.cpp"
 
 static std::default_random_engine engine(10); // random seed = 10
