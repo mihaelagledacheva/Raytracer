@@ -41,3 +41,11 @@ Output stored in _results/lab_4_2.png
 Adding texture
 Time elapsed: 2354 seconds
 Output stored in _results/lab_4_3.png
+
+Image Retargeting
+Time elapsed: 168 seconds
+Output stored in _results/lab_5_1.png
+
+Color Matching
+Time elapsed: 23 seconds
+Output stored in _results/lab_5_2.png
