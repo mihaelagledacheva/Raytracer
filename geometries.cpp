@@ -320,6 +320,8 @@ private:
                     double g = std::min(1., std::pow(image_data[pixel * channels + 1] / 255.0, 2.2));
                     double b = std::min(1., std::pow(image_data[pixel * channels + 2] / 255.0, 2.2));
                     albedo = Vector(r, g, b);
+                } else {
+                    albedo = this->albedo;
                 }
             }
             intersection = true;
